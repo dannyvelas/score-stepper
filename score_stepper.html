@@ -116,6 +116,8 @@ function loadNotes() {
   }
   document.getElementById('err').textContent = '';
   notes = parsed; idx = 0;
+  const v = document.getElementById('ni').value.trim();
+  history.replaceState(null, '', v ? '#' + encodeURIComponent(v) : location.pathname + location.search);
   renderStrip();
   updateUI();
   document.getElementById('play-btn').disabled = !notes.length;
@@ -256,5 +258,7 @@ document.addEventListener('keydown', e=>{
   }
 });
 
+const h = location.hash.slice(1);
+if (h) document.getElementById('ni').value = decodeURIComponent(h);
 loadNotes();
 </script>
