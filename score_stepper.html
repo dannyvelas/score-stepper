@@ -58,6 +58,11 @@
     </div>
   </div>
 
+  <div style="display:flex;gap:6px;justify-content:center;margin-bottom:1rem;">
+    <button id="btn-piano" onclick="setInstrument('piano')" style="padding:7px 20px;font-size:13px;">Piano</button>
+    <button id="btn-guitar" onclick="setInstrument('guitar')" style="padding:7px 20px;font-size:13px;opacity:0.4;">Guitar</button>
+  </div>
+
   <div style="display: flex; gap: 8px; align-items: center; justify-content: center;">
     <button id="play-btn" onclick="handlePlay()" disabled style="padding: 11px 40px; font-size: 15px; font-weight: 500;">
       <i class="ti ti-player-play" aria-hidden="true" style="font-size:17px; vertical-align:-2px; margin-right:5px;"></i>Next note
@@ -76,7 +81,7 @@
 <script src="https://cdn.jsdelivr.net/npm/tone/build/Tone.js"></script>
 <script>
 const SOL = {do:'C',re:'D',mi:'E',fa:'F',sol:'G',la:'A',si:'B',ti:'B'};
-let notes=[], idx=0, synth=null;
+let notes=[], idx=0, synth=null, instrument='piano';
 
 function parseNote(s) {
   s = s.trim();
@@ -188,10 +193,8 @@ function updateUI(played) {
   btn.disabled = !notes.length;
 }
 
-async function initSynth() {
-  if (synth) return;
-  await Tone.start();
-  synth = new Tone.Sampler({
+const SAMPLERS = {
+  piano: {
     urls: {
       A0:"A0.mp3", C1:"C1.mp3", "D#1":"Ds1.mp3", "F#1":"Fs1.mp3",
       A1:"A1.mp3", C2:"C2.mp3", "D#2":"Ds2.mp3", "F#2":"Fs2.mp3",
@@ -204,8 +207,35 @@ async function initSynth() {
     },
     release: 1,
     baseUrl: "https://tonejs.github.io/audio/salamander/",
-  }).toDestination();
+  },
+  guitar: {
+    urls: {
+      A2:"A2.mp3", A3:"A3.mp3", A4:"A4.mp3",
+      B2:"B2.mp3", B3:"B3.mp3", B4:"B4.mp3",
+      C3:"C3.mp3", C4:"C4.mp3", C5:"C5.mp3",
+      D3:"D3.mp3", D4:"D4.mp3", D5:"D5.mp3",
+      E2:"E2.mp3", E3:"E3.mp3", E4:"E4.mp3",
+      F3:"F3.mp3", F4:"F4.mp3",
+      G2:"G2.mp3", G3:"G3.mp3", G4:"G4.mp3",
+    },
+    release: 1,
+    baseUrl: "https://tonejs.github.io/audio/guitar-acoustic/",
+  },
+};
+
+async function initSynth() {
+  if (synth) return;
+  await Tone.start();
+  synth = new Tone.Sampler(SAMPLERS[instrument]).toDestination();
   await Tone.loaded();
+}
+
+function setInstrument(name) {
+  if (name === instrument) return;
+  instrument = name;
+  if (synth) { synth.dispose(); synth = null; }
+  document.getElementById('btn-piano').style.opacity = name === 'piano' ? '1' : '0.4';
+  document.getElementById('btn-guitar').style.opacity = name === 'guitar' ? '1' : '0.4';
 }
 
 async function handlePlay() {
