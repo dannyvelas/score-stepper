@@ -1,0 +1,233 @@
+
+<h2 class="sr-only">Score stepper — click next note or press space to play through your sequence one note at a time</h2>
+
+<style>
+@keyframes notePop {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.07); }
+  100% { transform: scale(1); }
+}
+.pop { animation: notePop 0.22s ease-out; }
+#strip::-webkit-scrollbar { height: 3px; }
+#strip::-webkit-scrollbar-thumb { background: var(--color-border-secondary); border-radius: 2px; }
+</style>
+
+<div style="padding: 1.5rem 0; max-width: 580px; margin: 0 auto;">
+
+  <div style="margin-bottom: 1.25rem;">
+    <div style="font-size: 13px; color: var(--color-text-secondary); margin-bottom: 6px;">
+      Notes — scientific notation <span style="font-family: var(--font-mono); font-size: 12px;">C4 D#4 Eb3</span> or solfège <span style="font-family: var(--font-mono); font-size: 12px;">Do Re Mi Fa Sol La Si</span>
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <textarea id="ni" rows="2"
+        style="flex: 1; font-family: var(--font-mono); font-size: 14px; resize: none; min-width: 0;"
+        placeholder="C4 D4 E4 F4 G4 A4 B4 C5">C4 D4 E4 F4 G4 A4 B4 C5</textarea>
+      <button onclick="loadNotes()" style="align-self: stretch; padding: 0 20px; white-space: nowrap; font-size: 14px;">
+        Load
+      </button>
+    </div>
+    <div id="err" style="font-size: 12px; color: var(--color-text-danger); margin-top: 4px; min-height: 16px;"></div>
+  </div>
+
+  <div id="strip" style="
+    display: flex; flex-wrap: nowrap; gap: 6px;
+    padding: 10px 12px;
+    background: var(--color-background-secondary);
+    border-radius: var(--border-radius-md);
+    margin-bottom: 1.25rem;
+    min-height: 46px; align-items: center;
+    overflow-x: auto;
+  ">
+    <span style="font-size:13px;color:var(--color-text-tertiary);font-style:italic;white-space:nowrap;">Load some notes to begin</span>
+  </div>
+
+  <div style="
+    text-align: center;
+    padding: 2.25rem 1rem 1.5rem;
+    border: 0.5px solid var(--color-border-tertiary);
+    border-radius: var(--border-radius-lg);
+    margin-bottom: 1.25rem;
+  ">
+    <div style="display: flex; align-items: flex-end; justify-content: center; gap: 2px; line-height: 1;">
+      <div id="note-big" style="font-size: 84px; font-weight: 500; letter-spacing: -3px; color: var(--color-text-primary); line-height: 1;">—</div>
+      <div id="note-oct" style="font-size: 30px; font-weight: 400; color: var(--color-text-secondary); padding-bottom: 8px;"></div>
+    </div>
+    <div id="counter" style="font-size: 13px; color: var(--color-text-tertiary); margin-top: 14px; min-height: 20px;"></div>
+    <div style="height: 2px; background: var(--color-background-secondary); border-radius: 2px; margin-top: 14px; overflow: hidden;">
+      <div id="prog" style="height:100%; background: var(--color-text-primary); border-radius:2px; width:0%; transition: width 0.2s ease;"></div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 8px; align-items: center; justify-content: center;">
+    <button id="play-btn" onclick="handlePlay()" disabled style="padding: 11px 40px; font-size: 15px; font-weight: 500;">
+      <i class="ti ti-player-play" aria-hidden="true" style="font-size:17px; vertical-align:-2px; margin-right:5px;"></i>Next note
+    </button>
+    <button onclick="resetSeq()" style="padding: 11px 14px;" aria-label="Restart from beginning">
+      <i class="ti ti-refresh" aria-hidden="true" style="font-size:17px; vertical-align:-2px;"></i>
+    </button>
+  </div>
+
+  <div style="text-align:center; font-size:12px; color:var(--color-text-tertiary); margin-top:10px;">
+    or press <kbd style="font-family:var(--font-mono); font-size:11px; background:var(--color-background-secondary); border:0.5px solid var(--color-border-secondary); border-radius:4px; padding:1px 7px;">Space</kbd>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/tone/build/Tone.js"></script>
+<script>
+const SOL = {do:'C',re:'D',mi:'E',fa:'F',sol:'G',la:'A',si:'B',ti:'B'};
+let notes=[], idx=0, synth=null;
+
+function parseNote(s) {
+  s = s.trim();
+  if (!s) return null;
+  const m = s.toLowerCase().match(/^(do|re|mi|fa|sol|la|si|ti)(\d?)$/);
+  if (m) {
+    const cap = m[1][0].toUpperCase() + m[1].slice(1);
+    return { label:cap, big:cap, oct:'', tone: SOL[m[1]]+(m[2]||'4') };
+  }
+  const n = s.match(/^([A-Ga-g])([#b]?)(\d)$/);
+  if (n) {
+    const l=n[1].toUpperCase(), a=n[2]==='#'?'♯':n[2]==='b'?'♭':'';
+    return { label:l+a+n[3], big:l+a, oct:n[3], tone:l+n[2]+n[3] };
+  }
+  return null;
+}
+
+function parseStep(s) {
+  const parts = s.split('/');
+  const parsed = parts.map(parseNote);
+  if (parsed.some(x => x === null)) return null;
+  return parsed;
+}
+
+function loadNotes() {
+  const tokens = document.getElementById('ni').value.split(/[\s,;|]+/).filter(Boolean);
+  const parsed = tokens.map(parseStep);
+  const bad = parsed.findIndex(x=>x===null);
+  if (bad !== -1) {
+    document.getElementById('err').textContent = `Can't parse "${tokens[bad]}" — try C4, D#4, Eb3, Do Re Mi, or C4/E4/G4`;
+    return;
+  }
+  document.getElementById('err').textContent = '';
+  notes = parsed; idx = 0;
+  renderStrip();
+  updateUI();
+  document.getElementById('play-btn').disabled = !notes.length;
+}
+
+function renderStrip() {
+  const strip = document.getElementById('strip');
+  if (!notes.length) {
+    strip.innerHTML = '<span style="font-size:13px;color:var(--color-text-tertiary);font-style:italic;white-space:nowrap;">Load some notes to begin</span>';
+    return;
+  }
+  strip.innerHTML = notes.map((step,i)=>`<span id="p${i}" style="
+    padding:3px 10px; border-radius:999px; font-size:13px;
+    font-family:var(--font-mono); white-space:nowrap; flex-shrink:0;
+    border:0.5px solid var(--color-border-tertiary);
+    background:var(--color-background-primary);
+    color:var(--color-text-secondary);
+  ">${step.map(n=>n.label).join('/')}</span>`).join('');
+}
+
+function setPills(current) {
+  notes.forEach((_,i)=>{
+    const el=document.getElementById('p'+i);
+    if (!el) return;
+    if (i===current) {
+      el.style.border='1.5px solid var(--color-text-primary)';
+      el.style.color='var(--color-text-primary)';
+      el.style.fontWeight='500';
+      el.style.background='var(--color-background-primary)';
+      el.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
+    } else if (i<current) {
+      el.style.border='0.5px solid var(--color-border-tertiary)';
+      el.style.color='var(--color-text-tertiary)';
+      el.style.fontWeight='400';
+      el.style.background='var(--color-background-secondary)';
+    } else {
+      el.style.border='0.5px solid var(--color-border-tertiary)';
+      el.style.color='var(--color-text-secondary)';
+      el.style.fontWeight='400';
+      el.style.background='var(--color-background-primary)';
+    }
+  });
+}
+
+function updateUI(played) {
+  const big=document.getElementById('note-big');
+  const oct=document.getElementById('note-oct');
+  const ctr=document.getElementById('counter');
+  const prog=document.getElementById('prog');
+  const btn=document.getElementById('play-btn');
+  const done=idx>=notes.length;
+
+  if (played!==undefined) {
+    const step=notes[played];
+    const isChord=step.length>1;
+    big.style.fontSize=isChord?'40px':'84px';
+    big.style.letterSpacing=isChord?'-1px':'-3px';
+    big.textContent=isChord?step.map(n=>n.label).join('/'):step[0].big;
+    oct.textContent=isChord?'':step[0].oct;
+    ctr.textContent=`${played+1} / ${notes.length}`;
+    prog.style.width=`${((played+1)/notes.length)*100}%`;
+    setPills(played);
+    big.classList.remove('pop'); void big.offsetWidth; big.classList.add('pop');
+  } else if (notes.length) {
+    big.style.fontSize='84px'; big.style.letterSpacing='-3px';
+    big.textContent='—'; oct.textContent='';
+    ctr.textContent='Ready'; prog.style.width='0%';
+    setPills(-1);
+  } else {
+    big.style.fontSize='84px'; big.style.letterSpacing='-3px';
+    big.textContent='—'; oct.textContent='';
+    ctr.textContent=''; prog.style.width='0%';
+  }
+
+  btn.disabled = !notes.length;
+}
+
+async function initSynth() {
+  if (synth) return;
+  await Tone.start();
+  synth = new Tone.Sampler({
+    urls: {
+      A0:"A0.mp3", C1:"C1.mp3", "D#1":"Ds1.mp3", "F#1":"Fs1.mp3",
+      A1:"A1.mp3", C2:"C2.mp3", "D#2":"Ds2.mp3", "F#2":"Fs2.mp3",
+      A2:"A2.mp3", C3:"C3.mp3", "D#3":"Ds3.mp3", "F#3":"Fs3.mp3",
+      A3:"A3.mp3", C4:"C4.mp3", "D#4":"Ds4.mp3", "F#4":"Fs4.mp3",
+      A4:"A4.mp3", C5:"C5.mp3", "D#5":"Ds5.mp3", "F#5":"Fs5.mp3",
+      A5:"A5.mp3", C6:"C6.mp3", "D#6":"Ds6.mp3", "F#6":"Fs6.mp3",
+      A6:"A6.mp3", C7:"C7.mp3", "D#7":"Ds7.mp3", "F#7":"Fs7.mp3",
+      A7:"A7.mp3", C8:"C8.mp3",
+    },
+    release: 1,
+    baseUrl: "https://tonejs.github.io/audio/salamander/",
+  }).toDestination();
+  await Tone.loaded();
+}
+
+async function handlePlay() {
+  if (!notes.length) return;
+  await initSynth();
+  const step=notes[idx], pi=idx;
+  idx = (idx + 1) % notes.length;
+  synth.triggerAttackRelease(step.map(n=>n.tone),'2n');
+  updateUI(pi);
+}
+
+function resetSeq() {
+  idx=0; updateUI();
+  document.getElementById('play-btn').disabled = !notes.length;
+}
+
+document.addEventListener('keydown', e=>{
+  if (e.code==='Space' && !['TEXTAREA','INPUT'].includes(e.target.tagName)) {
+    e.preventDefault();
+    if (!document.getElementById('play-btn').disabled) handlePlay();
+  }
+});
+
+loadNotes();
+</script>
